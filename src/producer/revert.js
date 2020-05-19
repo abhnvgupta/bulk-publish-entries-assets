@@ -7,14 +7,20 @@ let config = require('../../config');
 const req = require('../util/request');
 const { iniatlizeLogger, bulkUnPublish, publishUsingVersion } = require('../consumer/publish');
 
+// for checking if a logfile has been provided by user
+function getRevertAndLogfile(args) {
+  if (args.length === 2) {
+    console.error('Please provide a logfile to use for unpublishing.');
+  }
+  const logfilenameProvidedByUser = args[args.length - 1];
+  return logfilenameProvidedByUser;
+}
+
 const logfilenameProvidedByUser = getRevertAndLogfile(process.argv);
 const intervalBetweenPublishRequests = 3; // interval in seconds
 
 const unpublishQueue = new Queue();
 const publishQueue = new Queue();
-
-unpublishQueue.consumer = bulkUnPublish;
-publishQueue.consumer = publishUsingVersion;
 
 const revertLogFileName = 'revert';
 
@@ -23,6 +29,134 @@ function setConfig(conf) {
   config = conf;
   unpublishQueue.config = conf;
   publishQueue.config = conf;
+  unpublishQueue.consumer = bulkUnPublish;
+  publishQueue.consumer = publishUsingVersion;
+}
+
+function getLogFileDataType(data) {
+  const element = data[0];
+  if (element.message.options.Type) {
+    return element.message.options.Type;
+  }
+  if (element.message.options.entryUid) {
+    return 'entry';
+  }
+  return 'asset';
+}
+
+async function getEnvironmentUids(environments) {
+  try {
+    const options = {
+      method: 'GET',
+      uri: `${config.apiEndPoint}/v${config.apiVersion}/environments`,
+      headers: {
+        api_key: config.apikey,
+        authorization: config.manageToken,
+      },
+    };
+    const allEnvironments = await req(options);
+    const filteredEnvironments = allEnvironments.environments.filter((environment) => environments.indexOf(environment.name) !== -1).map(({ name, uid }) => ({ name, uid }));
+    return filteredEnvironments;
+  } catch (error) {
+    throw new Error(error);
+  }
+}
+
+function filterPublishDetails(elements, environments, locale) {
+  if (locale && locale.length > 0) {
+    locale.forEach((loc) => {
+      elements[loc].forEach((entry) => {
+        if (entry.publish_details.length > 0) {
+          entry.publish_details = entry.publish_details.filter((element) => environments.indexOf(element.environment) !== -1 && element.locale === loc);
+        }
+      });
+    });
+  } else {
+    for (let i = 0; i < elements.length; i += 1) {
+      if (elements[i].publish_details.length > 0) {
+        elements[i].publish_details = elements[i].publish_details.filter((element) => environments.indexOf(element.environment) !== -1);
+      }
+    }
+  }
+  return elements;
+}
+
+async function formatLogData(data) {
+  const formattedLogs = {};
+  const type = getLogFileDataType(data);
+
+  switch (type) {
+    case 'entry':
+      formattedLogs.entries = {};
+      formattedLogs.locale = [];
+      for (let i = 0; i < data.length; i += 1) {
+        if (formattedLogs.locale.indexOf(data[i].message.options.locale) === -1) {
+          formattedLogs.locale.push(data[i].message.options.locale);
+        }
+        if (!formattedLogs.entries[data[i].message.options.locale]) formattedLogs.entries[data[i].message.options.locale] = [];
+        if (data[i].message.options.entries) {
+          // for handling bulk-publish-entries logs
+          formattedLogs.entries[data[i].message.options.locale] = formattedLogs.entries[data[i].message.options.locale].concat(data[i].message.options.entries);
+        } else {
+          // for handling logs created by publishing in a regular way
+          formattedLogs.entries[data[i].message.options.locale].push({
+            uid: data[i].message.options.entryUid,
+            content_type: data[i].message.options.content_type,
+            locale: data[i].message.options.locale,
+            publish_details: data[i].message.options.publish_details,
+          });
+        }
+        if (!formattedLogs.environments) formattedLogs.environments = data[i].message.options.environments;
+        if (!formattedLogs.api_key) formattedLogs.api_key = data[i].message.api_key;
+      }
+      break;
+    case 'asset':
+      formattedLogs.assets = [];
+      for (let i = 0; i < data.length; i += 1) {
+        if (data[i].message.options.assets) {
+          // for handling bulk-publish-assets logs
+          formattedLogs.assets = formattedLogs.assets.concat(data[i].message.options.assets);
+        } else {
+          // for handling logs created by publishing assets in a regular way
+          formattedLogs.assets.push({
+            uid: data[i].message.options.assetUid,
+            publish_details: data[i].message.options.publish_details,
+          });
+        }
+        if (!formattedLogs.environments) formattedLogs.environments = data[i].message.options.environments;
+        if (!formattedLogs.api_key) formattedLogs.api_key = data[i].message.api_key;
+      }
+      break;
+    default: break;
+  }
+
+  formattedLogs.environments = await getEnvironmentUids(formattedLogs.environments);
+  formattedLogs.type = type;
+  if (type === 'entry') {
+    formattedLogs.entries = filterPublishDetails(formattedLogs.entries, formattedLogs.environments.map(({ uid }) => uid), formattedLogs.locale);
+  } else {
+    formattedLogs.assets = filterPublishDetails(formattedLogs.assets, formattedLogs.environments.map(({ uid }) => uid));
+  }
+
+  return formattedLogs;
+}
+
+async function mapSeries(iterable, action) {
+  for (x of iterable) {
+    await action(x);
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function processPublishRequests(data) {
+  return sleep(intervalBetweenPublishRequests * 1000).then(() => {
+    publishQueue.Enqueue(data);
+  });
 }
 
 async function revertUsingLogs(logFileName) {
@@ -181,6 +315,7 @@ async function revertUsingLogs(logFileName) {
               }
             });
             break;
+          default: break;
         }
       });
     } else {
@@ -189,153 +324,20 @@ async function revertUsingLogs(logFileName) {
   }
 }
 
-async function formatLogData(data) {
-  const formattedLogs = {};
-  const type = getLogFileDataType(data);
-
-  switch (type) {
-    case 'entry':
-      formattedLogs.entries = {};
-      formattedLogs.locale = [];
-      for (let i = 0; i < data.length; i++) {
-        if (formattedLogs.locale.indexOf(data[i].message.options.locale) === -1) {
-          formattedLogs.locale.push(data[i].message.options.locale);
-        }
-        if (!formattedLogs.entries[data[i].message.options.locale]) formattedLogs.entries[data[i].message.options.locale] = [];
-        if (data[i].message.options.entries) {
-          // for handling bulk-publish-entries logs
-          formattedLogs.entries[data[i].message.options.locale] = formattedLogs.entries[data[i].message.options.locale].concat(data[i].message.options.entries);
-        } else {
-          // for handling logs created by publishing in a regular way
-          formattedLogs.entries[data[i].message.options.locale].push({
-            uid: data[i].message.options.entryUid,
-            content_type: data[i].message.options.content_type,
-            locale: data[i].message.options.locale,
-            publish_details: data[i].message.options.publish_details,
-          });
-        }
-        if (!formattedLogs.environments) formattedLogs.environments = data[i].message.options.environments;
-        if (!formattedLogs.api_key) formattedLogs.api_key = data[i].message.api_key;
-      }
-      break;
-    case 'asset':
-      formattedLogs.assets = [];
-      for (let i = 0; i < data.length; i++) {
-        if (data[i].message.options.assets) {
-          // for handling bulk-publish-assets logs
-          formattedLogs.assets = formattedLogs.assets.concat(data[i].message.options.assets);
-        } else {
-          // for handling logs created by publishing assets in a regular way
-          formattedLogs.assets.push({
-            uid: data[i].message.options.assetUid,
-            publish_details: data[i].message.options.publish_details,
-          });
-        }
-        if (!formattedLogs.environments) formattedLogs.environments = data[i].message.options.environments;
-        if (!formattedLogs.api_key) formattedLogs.api_key = data[i].message.api_key;
-      }
-      break;
-  }
-
-  formattedLogs.environments = await getEnvironmentUids(formattedLogs.environments);
-  formattedLogs.type = type;
-  if (type === 'entry') {
-    formattedLogs.entries = filterPublishDetails(formattedLogs.entries, formattedLogs.environments.map(({ uid }) => uid), formattedLogs.locale);
-  } else {
-    formattedLogs.assets = filterPublishDetails(formattedLogs.assets, formattedLogs.environments.map(({ uid }) => uid));
-  }
-
-  return formattedLogs;
-}
-
-async function getEnvironmentUids(environments) {
-  try {
-    const options = {
-      method: 'GET',
-      uri: `${config.apiEndPoint}/v3/environments`,
-      headers: {
-        api_key: config.apikey,
-        authorization: config.manageToken,
-      },
-    };
-    const allEnvironments = await req(options);
-    const filteredEnvironments = allEnvironments.environments.filter((environment) => environments.indexOf(environment.name) !== -1).map(({ name, uid }) => ({ name, uid }));
-    return filteredEnvironments;
-  } catch (error) {
-    throw new Error(error);
-  }
-}
-
-function filterPublishDetails(elements, environments, locale) {
-  if (locale && locale.length > 0) {
-    locale.forEach((loc) => {
-      elements[loc].forEach((entry) => {
-        if (entry.publish_details.length > 0) {
-          entry.publish_details = entry.publish_details.filter((element) => environments.indexOf(element.environment) !== -1 && element.locale === loc);
-        }
-      });
-    });
-  } else {
-    for (let i = 0; i < elements.length; i++) {
-      if (elements[i].publish_details.length > 0) {
-        elements[i].publish_details = elements[i].publish_details.filter((element) => environments.indexOf(element.environment) !== -1);
-      }
-    }
-  }
-  return elements;
-}
-
-// for checking if a logfile has been provided by user
-function getRevertAndLogfile(args) {
-  if (args.length === 2) {
-    console.error('Please provide a logfile to use for unpublishing.');
-  }
-  const logfilenameProvidedByUser = args[args.length - 1];
-  return logfilenameProvidedByUser;
-}
-
-function getLogFileDataType(data) {
-  const element = data[0];
-  if (element.message.options.Type) {
-    return element.message.options.Type;
-  }
-  if (element.message.options.entryUid) {
-    return 'entry';
-  }
-  return 'asset';
-}
-
-function processPublishRequests(data) {
-  return sleep(intervalBetweenPublishRequests * 1000).then(() => {
-    publishQueue.Enqueue(data);
-  });
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function mapSeries(iterable, action) {
-  for (const x of iterable) {
-    await action(x);
-  }
-}
-
 setConfig(config);
 
 async function start() {
-  const ok = await yesno({
-    question: `Are you sure you want to revert using the file "${logfilenameProvidedByUser}" ?`
-  })
-  if (ok) {
+  // const ok = await yesno({
+  //   question: `Are you sure you want to revert using the file "${logfilenameProvidedByUser}" ?`,
+  // });
+  // if (ok) {
   revertUsingLogs(logfilenameProvidedByUser);
-  }
+  // }
 }
 
 module.exports = {
   setConfig,
+  revertUsingLogs,
 };
 
 if (process.argv.slice(2)[0] === '-retryFailed') {

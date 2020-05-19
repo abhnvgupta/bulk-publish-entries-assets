@@ -18,7 +18,7 @@ class Queue extends EventEmitter {
 
   Enqueue(obj) {
     this.store.push(obj);
-    this.Dequeue();
+    this.check();
   }
 
   Dequeue() {

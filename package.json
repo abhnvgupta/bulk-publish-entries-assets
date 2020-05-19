@@ -4,7 +4,7 @@
   "description": "This script lets you bulk publish entries and assets of your stack",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
+    "test": "node copyLogs.js && jest",
     "publish_assets": "node src/producer/publish_assets.js",
     "publish_entries": "node src/producer/publish_entries.js",
     "publish_unpublish": "node src/producer/publish_unpublished_env.js",

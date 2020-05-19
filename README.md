@@ -239,7 +239,7 @@ $ npm run publish_assets -- -retryFailed ${logFilename}
 
 ```
 for example
-//npm run publish_entries - - -retryFailed 18003bulkPublishEntries.error
+//npm run publish_entries -- -retryFailed 18003bulkPublishEntries.error
 
 
 #### Known Limitations:

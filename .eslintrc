@@ -3,12 +3,14 @@
   "env": {
     "node": true,
     "es6": true,
-    "browser": true
+    "browser": true,
+    "jest": true
   },
   "rules": {
     "no-console": "off",
     "no-underscore-dangle":[1,{"allow":["_version"]}],
-    'max-len': ["error", { "code": 250 }],
-    "no-param-reassign": [2, {"props": false}]
+    "max-len": ["error", { "code": 250 }],
+    "no-param-reassign": [2, {"props": false}],
+    "no-lonely-if": "off"
   }
 }

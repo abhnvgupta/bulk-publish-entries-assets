@@ -14,19 +14,24 @@ let bulkUnPublishSet = [];
 let bulkUnPulishAssetSet = [];
 let logFileName;
 
-let changedFlag = false;
-
-
-if (config.Unpublish.bulkUnpublish) {
-  logFileName = 'bulkUnpublish';
-  queue.consumer = bulkUnPublish;
-} else {
-  logFileName = 'Unpublish';
-  entryQueue.consumer = UnpublishEntry;
-  assetQueue.consumer = UnpublishAsset;
+function setConfig(conf) {
+  if (conf.Unpublish.bulkUnpublish) {
+    logFileName = 'bulkUnpublish';
+    queue.consumer = bulkUnPublish;
+  } else {
+    logFileName = 'Unpublish';
+    entryQueue.consumer = UnpublishEntry;
+    assetQueue.consumer = UnpublishAsset;
+  }
+  config = conf;
+  queue.config = conf;
+  entryQueue.config = conf;
+  assetQueue.config = conf;
 }
 
+let changedFlag = false;
 
+setConfig(config);
 iniatlizeLogger(logFileName);
 
 function getQueryParams(filter) {
@@ -38,13 +43,6 @@ function getQueryParams(filter) {
   });
 
   return queryString;
-}
-
-function setConfig(conf) {
-  config = conf;
-  queue.config = conf;
-  entryQueue.config = conf;
-  assetQueue.config = conf;
 }
 
 function bulkAction(items) {
@@ -120,7 +118,7 @@ function bulkAction(items) {
 async function getSyncEntries(locale, queryParams, paginationToken = null) {
   try {
     const conf = {
-      uri: `${config.cdnEndPoint}/v3/stacks/sync?${paginationToken ? `pagination_token=${paginationToken}` : 'init=true'}${queryParams}`,
+      uri: `${config.cdnEndPoint}/v${config.apiVersion}/stacks/sync?${paginationToken ? `pagination_token=${paginationToken}` : 'init=true'}${queryParams}`,
       headers: {
         api_key: config.apikey,
         access_token: config.Unpublish.deliveryToken,
@@ -149,8 +147,6 @@ module.exports = {
   setConfig,
   getQueryParams,
 };
-
-setConfig(config);
 
 async function start() {
   const queryParams = getQueryParams(config.Unpublish.filter);

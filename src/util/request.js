@@ -1,6 +1,7 @@
 const Bluebird = require('bluebird');
 const request = Bluebird.promisify(require('request'));
 const debug = require('debug')('requests');
+const config = require('../../config');
 
 const MAX_RETRY_LIMIT = 8;
 
@@ -12,6 +13,10 @@ var makeCall = module.exports = function (req, RETRY) {
       } else if (RETRY > MAX_RETRY_LIMIT) {
         return reject(new Error('Max retry limit exceeded!'));
       }
+      if(!req.headers) {
+        req.headers = {};
+      } 
+      req.headers['X-User-Agent'] = `bulk-publish-entries-assets/v${config.apiVersion}`;
       return request(req).then((response) => {
         let timeDelay;
         if (response.statusCode >= 200 && response.statusCode <= 399) {

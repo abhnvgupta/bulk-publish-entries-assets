@@ -2,6 +2,7 @@ module.exports = {
   apikey: '', // api Key of the stack
   apiEndPoint: 'https://api.contentstack.io',
   cdnEndPoint: 'https://cdn.contentstack.io',
+  apiVersion: '3',
   manageToken: '', // management token of the stack
   publish_unpublished_env: {
     contentTypes: ['helloworld'],
@@ -13,7 +14,7 @@ module.exports = {
   publish_assets: {
     environments: ['test'],
     folderUid: 'blt0829fdfd03dfabc5', // uid of the folder whose contents needs to be published, cs_root for every asset of the stack
-    bulkPublish: true,
+    bulkPublish: false,
   },
   publish_entries: {
     contentTypes: ['test'],

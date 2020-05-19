@@ -11,6 +11,7 @@ queue.consumer = sampleConsumerFunction;
 
 describe('testing queue operations', () => {
   const mockedlog = () => {};
+  console.log = mockedlog;
   it('enqueing operation', () => {
     expect(queue.Enqueue({ api_key: 'apiKey', access_token: 'access_token' })).toBeUndefined();
   });

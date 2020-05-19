@@ -10,8 +10,8 @@ const queue = new Queue();
 const entryQueue = new Queue();
 const assetQueue = new Queue();
 
-let bulkUnPublishSet = [];
-let bulkUnPulishAssetSet = [];
+let bulkPublishSet = [];
+let bulkPublishAssetSet = [];
 let changedFlag = false;
 let logFileName;
 
@@ -54,8 +54,8 @@ function bulkAction(items) {
     }
 
     if (config.cross_env_publish.bulkPublish) {
-      if (bulkUnPublishSet.length < 10 && item.type === 'entry_published') {
-        bulkUnPublishSet.push({
+      if (bulkPublishSet.length < 10 && item.type === 'entry_published') {
+        bulkPublishSet.push({
           uid: item.data.uid,
           content_type: item.content_type_uid,
           locle: item.data.publish_details.locale || 'en-us',
@@ -64,43 +64,43 @@ function bulkAction(items) {
         });
       }
 
-      if (bulkUnPulishAssetSet.length < 10 && item.type === 'asset_published') {
-        bulkUnPulishAssetSet.push({
+      if (bulkPublishAssetSet.length < 10 && item.type === 'asset_published') {
+        bulkPublishAssetSet.push({
           uid: item.data.uid,
           version: item.data._version,
           publish_details: [item.data.publish_details] || [],
         });
       }
 
-      if (bulkUnPulishAssetSet.length === 10) {
+      if (bulkPublishAssetSet.length === 10) {
         queue.Enqueue({
-          assets: bulkUnPulishAssetSet, Type: 'asset', locale: config.cross_env_publish.filter.locale, environments: config.cross_env_publish.destEnv,
+          assets: bulkPublishAssetSet, Type: 'asset', locale: config.cross_env_publish.filter.locale, environments: config.cross_env_publish.destEnv,
         });
-        bulkUnPulishAssetSet = [];
+        bulkPublishAssetSet = [];
         return;
       }
 
-      if (bulkUnPublishSet.length === 10) {
+      if (bulkPublishSet.length === 10) {
         queue.Enqueue({
-          entries: bulkUnPublishSet, locale: config.cross_env_publish.filter.locale, Type: 'entry', environments: config.cross_env_publish.destEnv,
+          entries: bulkPublishSet, locale: config.cross_env_publish.filter.locale, Type: 'entry', environments: config.cross_env_publish.destEnv,
         });
-        bulkUnPublishSet = [];
+        bulkPublishSet = [];
         return;
       }
 
-      if (index === items.length - 1 && bulkUnPulishAssetSet.length <= 10 && bulkUnPulishAssetSet.length > 0) {
+      if (index === items.length - 1 && bulkPublishAssetSet.length <= 10 && bulkPublishAssetSet.length > 0) {
         queue.Enqueue({
-          assets: bulkUnPulishAssetSet, Type: 'asset', locale: config.cross_env_publish.filter.locale, environments: config.cross_env_publish.destEnv,
+          assets: bulkPublishAssetSet, Type: 'asset', locale: config.cross_env_publish.filter.locale, environments: config.cross_env_publish.destEnv,
         });
-        bulkUnPulishAssetSet = [];
+        bulkPublishAssetSet = [];
         return;
       }
 
-      if (index === items.length - 1 && bulkUnPublishSet.length <= 10 && bulkUnPublishSet.length > 0) {
+      if (index === items.length - 1 && bulkPublishSet.length <= 10 && bulkPublishSet.length > 0) {
         queue.Enqueue({
-          entries: bulkUnPublishSet, locale: config.cross_env_publish.filter.locale, Type: 'entry', environments: config.cross_env_publish.destEnv,
+          entries: bulkPublishSet, locale: config.cross_env_publish.filter.locale, Type: 'entry', environments: config.cross_env_publish.destEnv,
         });
-        bulkUnPublishSet = [];
+        bulkPublishSet = [];
       }
     } else {
       if (item.type === 'entry_published') {
@@ -120,7 +120,7 @@ function bulkAction(items) {
 async function getSyncEntries(queryParams, paginationToken = null) {
   try {
     const conf = {
-      uri: `${config.cdnEndPoint}/v3/stacks/sync?${paginationToken ? `pagination_token=${paginationToken}` : 'init=true'}${queryParams}`,
+      uri: `${config.cdnEndPoint}/v${config.apiVersion}/stacks/sync?${paginationToken ? `pagination_token=${paginationToken}` : 'init=true'}${queryParams}`,
       headers: {
         api_key: config.apikey,
         access_token: config.cross_env_publish.deliveryToken,
@@ -154,6 +154,7 @@ async function start() {
 module.exports = {
   getSyncEntries,
   setConfig,
+  getQueryParams,
 };
 
 if (process.argv.slice(2)[0] === '-retryFailed') {

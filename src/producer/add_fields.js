@@ -11,20 +11,26 @@ let bulkPublishSet = [];
 
 let changedFlag = false;
 
-if (config.addFields.bulkPublish) {
-  logFileName = 'bulk_add_fields';
-  queue.consumer = bulkPublish;
-} else {
-  logFileName = 'addFields';
-  queue.consumer = publishEntry;
+function setConfig(conf) {
+  if (config.addFields.bulkPublish) {
+    logFileName = 'bulk_add_fields';
+    queue.consumer = bulkPublish;
+  } else {
+    logFileName = 'addFields';
+    queue.consumer = publishEntry;
+  }
+  config = conf;
+  queue.config = conf;
 }
+
+setConfig(config);
 
 iniatlizeLogger(logFileName);
 
 async function getContentTypeSchema(contentType) {
   try {
     const conf = {
-      uri: `${config.cdnEndPoint}/v3/content_types/${contentType}?include_global_field_schema=true`,
+      uri: `${config.cdnEndPoint}/v${config.apiVersion}/content_types/${contentType}?include_global_field_schema=true`,
       headers: {
         api_key: config.apikey,
         authorization: config.manageToken,
@@ -168,7 +174,7 @@ async function updateEntry(updatedEntry, contentType, locale) {
     entry: updatedEntry,
   };
   const conf = {
-    uri: `${config.apiEndPoint}/v3/content_types/${contentType}/entries/${updatedEntry.uid}?locale=${locale || 'en-us'}`,
+    uri: `${config.apiEndPoint}/v${config.apiVersion}/content_types/${contentType}/entries/${updatedEntry.uid}?locale=${locale || 'en-us'}`,
     method: 'PUT',
     headers: {
       api_key: config.apikey,
@@ -196,7 +202,7 @@ async function getEntries(schema, contentType, locale, skip = 0) {
   console.log(contentType);
   console.log(locale);
   const conf = {
-    uri: `${config.apiEndPoint}/v3/content_types/${contentType}/entries?locale=${locale || 'en-us'}&include_count=true&skip=${skip}&include_publish_details=true`,
+    uri: `${config.apiEndPoint}/v${config.apiVersion}/content_types/${contentType}/entries?locale=${locale || 'en-us'}&include_count=true&skip=${skip}&include_publish_details=true`,
     headers: {
       api_key: config.apikey,
       authorization: config.manageToken,
@@ -256,13 +262,6 @@ async function getEntries(schema, contentType, locale, skip = 0) {
   return true;
 }
 
-function setConfig(conf) {
-  config = conf;
-  queue.config = conf;
-}
-
-setConfig(config);
-
 /* eslint-disable no-await-in-loop */
 /* eslint-disable no-loop-func */
 
@@ -285,6 +284,7 @@ function start() {
 }
 
 module.exports = {
+  start,
   getContentTypeSchema,
   getEntries,
   setConfig,

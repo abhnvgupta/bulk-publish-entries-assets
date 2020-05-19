@@ -2,7 +2,7 @@ module.exports = {
   entry: {
     title: 'teststs',
     url: 'test',
-    multi_line: 'testedewd its 10 53 here feerde',
+    multi_line: 'testedewd its 10 53 feerde',
     tags: [],
     locale: 'ar-eg',
     uid: 'dummyEntryId',

@@ -1,6 +1,6 @@
 const nock = require('nock');
 const {
-  setConfig, getEntries, getContentTypes,
+  setConfig, getEntries, getContentTypes, start
 } = require('../../src/producer/publish_entries');
 const dummyConfig = require('../dummy/config');
 const bulkentriesResponse1 = require('../dummy/bulkentries1');
@@ -8,18 +8,21 @@ const bulkentriesResponse2 = require('../dummy/bulkentries2');
 const entryPublishResponse = require('../dummy/entrypublished');
 const contentTypesResponse = require('../dummy/bulkContentTypeResponse');
 
+const bulkPublishEntriesLog = '1587758242717.bulkPublishEntries.success';
+const publishEntriesLog = '1587758242718.PublishEntries.success';
+
 describe('testing bulk entries publish', () => {
   const mockedlog = () => {};
 
   beforeEach(() => {
     console.log = mockedlog;
-    nock(dummyConfig.cdnEndPoint, {
+    nock(dummyConfig.apiEndPoint, {
       reqheaders: {
         api_key: dummyConfig.apikey,
         authorization: dummyConfig.manageToken,
       },
     })
-      .get('/v3/content_types/dummyContentType/entries')
+      .get(`/v${dummyConfig.apiVersion}/content_types/dummyContentType/entries`)
       .query({
         include_count: true,
         skip: 0,
@@ -28,13 +31,13 @@ describe('testing bulk entries publish', () => {
       })
       .reply(200, bulkentriesResponse1);
 
-    nock(dummyConfig.cdnEndPoint, {
+    nock(dummyConfig.apiEndPoint, {
       reqheaders: {
         api_key: dummyConfig.apikey,
         authorization: dummyConfig.manageToken,
       },
     })
-      .get('/v3/content_types/dummyContentType/entries')
+      .get(`/v${dummyConfig.apiVersion}/content_types/dummyContentType/entries`)
       .query({
         include_count: true,
         skip: 2,
@@ -49,7 +52,7 @@ describe('testing bulk entries publish', () => {
         authorization: dummyConfig.manageToken,
       },
     })
-      .post('/v3/bulk/publish', {
+      .post(`/v${dummyConfig.apiVersion}/bulk/publish`, {
         entries: [{
           content_type: 'dummyContentType',
           uid: 'dummyEntryId',
@@ -64,20 +67,20 @@ describe('testing bulk entries publish', () => {
       })
       .reply(200, entryPublishResponse);
 
-    // nock(dummyConfig.apiEndPoint, {
-    //   reqheaders: {
-    //     api_key: dummyConfig.apikey,
-    //     authtoken: dummyConfig.authToken,
-    //     'Content-Type': 'application/json',
-    //   },
-    // })
-    //   .post('/v3/content_types/dummyContentType/entries/dummyEntryId2/publish', {
-    //     entry: {
-    //       environments: ['dummyEnvironment'],
-    //       locales: ['en-us'],
-    //     },
-    //   })
-    //   .reply(200, entryPublishResponse);
+    nock(dummyConfig.apiEndPoint, {
+      reqheaders: {
+        api_key: dummyConfig.apikey,
+        authtoken: dummyConfig.authToken,
+        'Content-Type': 'application/json',
+      },
+    })
+      .post(/\/content_types\/dummyContentType\/entries\/([a-zA-Z0-9]*)\/publish/, {
+        entry: {
+          environments: ['dummyEnvironment'],
+          locales: ['en-us'],
+        },
+      })
+      .reply(200, entryPublishResponse);
 
     nock(dummyConfig.cdnEndPoint, {
       reqheaders: {
@@ -85,7 +88,7 @@ describe('testing bulk entries publish', () => {
         authorization: dummyConfig.manageToken,
       },
     })
-      .get('/v3/content_types')
+      .get(`/v${dummyConfig.apiVersion}/content_types`)
       .query({
         include_count: true,
         skip: 0,
@@ -98,7 +101,7 @@ describe('testing bulk entries publish', () => {
         authorization: dummyConfig.manageToken,
       },
     })
-      .get('/v3/content_types')
+      .get(`/v${dummyConfig.apiVersion}/content_types`)
       .query({
         include_count: true,
         skip: 1,
@@ -107,14 +110,45 @@ describe('testing bulk entries publish', () => {
   });
 
   setConfig(dummyConfig);
+
+  it('testing get Entries and publish function', async () => {
+    expect(await start()).toBeUndefined();
+  });
+
+  it('testing get Entries and publish function', async () => {
+    dummyConfig.publish_entries.publishAllContentTypes = false;
+    setConfig(dummyConfig);
+    expect(await start()).toBeUndefined();
+  });
+
   it('testing get Entries and publish function', async () => {
     expect(await getEntries('dummyContentType', 'en-us')).toBeUndefined();
   });
+
+  it('testing get Entries and bulkPublish function', async () => {
+    dummyConfig.publish_entries.bulkPublish = true;
+    setConfig(dummyConfig);
+    expect(await getEntries('dummyContentType', 'en-us')).toBeUndefined();
+  });
+
   it('testing get ContentType call', async () => {
     const contentTypes = await getContentTypes(0);
     expect(Array.isArray(contentTypes)).toBe(true);
   });
+
   it('replying with error in get contentTypes call', async () => {
     expect(await getContentTypes(1)).toBeTruthy();
+  });
+
+  it('testing retryFailed for bulk publish log', async () => {
+    process.argv = ['stuff', 'stuff', '-retryFailed', bulkPublishEntriesLog];
+    expect(await start()).toBeUndefined();
+  });
+
+  it('testing retryFailed for bulk publish log', async () => {
+    dummyConfig.publish_entries.bulkPublish = false;
+    setConfig(dummyConfig);
+    process.argv = ['stuff', 'stuff', '-retryFailed', publishEntriesLog];
+    expect(await start()).toBeUndefined();
   });
 });

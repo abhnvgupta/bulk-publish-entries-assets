@@ -10,7 +10,12 @@ module.exports = async (filename, queue, Type) => {
       if (Type === 'publish') {
         if (log.message.options.Type === 'entry') {
           queue.entryQueue.Enqueue({
-            content_type: log.message.options.content_type, publish_details: log.message.options.publish_details, environments: log.message.options.environments, entryUid: log.message.options.entryUid, locale: log.message.options.locale, Type: 'entry',
+            content_type: log.message.options.content_type,
+            publish_details: log.message.options.publish_details,
+            environments: log.message.options.environments,
+            entryUid: log.message.options.entryUid,
+            locale: log.message.options.locale,
+            Type: 'entry',
           });
         } else {
           queue.assetQueue.Enqueue({

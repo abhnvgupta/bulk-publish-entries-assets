@@ -13,6 +13,6 @@ module.exports = {
       },
     ],
     deploy_content: 'true',
-    uid: 'blt6e988221145bc2e6',
+    uid: 'dummyEnvironment',
   },
 };

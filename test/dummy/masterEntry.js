@@ -16,7 +16,7 @@ module.exports = {
     markdown: '',
     group: {
       multi_line: '233',
-      single_line: '',
+      single_line: '990',
     },
     number: 123,
     boolean: false,

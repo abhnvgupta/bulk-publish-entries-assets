@@ -15,14 +15,19 @@ let bulkPublishSet = [];
 queue.consumer = bulkPublish;
 logFileName = 'bulkPublishEntries';
 
-
-if (config.publish_entries.bulkPublish) {
-  queue.consumer = bulkPublish;
-  logFileName = 'bulkPublishEntries';
-} else {
-  queue.consumer = publishEntry;
-  logFileName = 'PublishEntries';
+function setConfig(conf) {
+  if (conf.publish_entries.bulkPublish) {
+    queue.consumer = bulkPublish;
+    logFileName = 'bulkPublishEntries';
+  } else {
+    queue.consumer = publishEntry;
+    logFileName = 'PublishEntries';
+  }
+  config = conf;
+  queue.config = conf;
 }
+
+setConfig(config);
 
 iniatlizeLogger(logFileName);
 
@@ -31,7 +36,7 @@ async function getEntries(contentType, locale, skip = 0) {
   skipCount = skip;
   try {
     const conf = {
-      uri: `${config.apiEndPoint}/v3/content_types/${contentType}/entries?locale=${locale || 'en-us'}&include_count=true&skip=${skipCount}&include_publish_details=true`,
+      uri: `${config.apiEndPoint}/v${config.apiVersion}/content_types/${contentType}/entries?locale=${locale || 'en-us'}&include_count=true&skip=${skipCount}&include_publish_details=true`,
       headers: {
         api_key: config.apikey,
         authorization: config.manageToken,
@@ -85,7 +90,7 @@ async function getContentTypes(skip = 0, contentTypes = []) {
   skipCount = skip;
   contentTypesList = contentTypes;
   const conf = {
-    uri: `${config.cdnEndPoint}/v3/content_types?include_count=true&skip=${skipCount}`,
+    uri: `${config.cdnEndPoint}/v${config.apiVersion}/content_types?include_count=true&skip=${skipCount}`,
     headers: {
       api_key: config.apikey,
       authorization: config.manageToken,
@@ -108,35 +113,40 @@ async function getContentTypes(skip = 0, contentTypes = []) {
   return true;
 }
 
-function setConfig(conf) {
-  config = conf;
-  queue.config = conf;
-}
-
-setConfig(config);
-
 async function start() {
-  try {
-    if (config.publish_entries.publishAllContentTypes === true) {
-      allContentTypes = await getContentTypes();
-    } else {
-      allContentTypes = config.publish_entries.contentTypes;
-    }
-    for (let loc = 0; loc < config.publish_entries.locales.length; loc += 1) {
-      for (let i = 0; i < allContentTypes.length; i += 1) {
-        try {
-          /* eslint-disable no-await-in-loop */
-          await getEntries(allContentTypes[i].uid || allContentTypes[i], config.publish_entries.locales[loc]);
-          /* eslint-enable no-await-in-loop */
-        } catch (err) {
-          console.log(err);
-        }
+  if (process.argv.slice(2)[0] === '-retryFailed') {
+    if (typeof process.argv.slice(2)[1] === 'string' && process.argv.slice(2)[1]) {
+      if (config.publish_entries.bulkPublish) {
+        retryFailedLogs(process.argv.slice(2)[1], queue, 'bulk');
+      } else {
+        retryFailedLogs(process.argv.slice(2)[1], { entryQueue: queue }, 'publish');
       }
     }
-  } catch (err) {
-    console.log(err);
+  } else {
+    try {
+      if (config.publish_entries.publishAllContentTypes === true) {
+        allContentTypes = await getContentTypes();
+      } else {
+        allContentTypes = config.publish_entries.contentTypes;
+      }
+      for (let loc = 0; loc < config.publish_entries.locales.length; loc += 1) {
+        for (let i = 0; i < allContentTypes.length; i += 1) {
+          try {
+            /* eslint-disable no-await-in-loop */
+            await getEntries(allContentTypes[i].uid || allContentTypes[i], config.publish_entries.locales[loc]);
+            /* eslint-enable no-await-in-loop */
+          } catch (err) {
+            console.log(err);
+          }
+        }
+      }
+    } catch (err) {
+      console.log(err);
+    }
   }
 }
+
+start();
 
 module.exports = {
   getEntries,
@@ -144,18 +154,3 @@ module.exports = {
   getContentTypes,
   start,
 };
-
-if (process.argv.slice(2)[0] === '-retryFailed') {
-  if (typeof process.argv.slice(2)[1] === 'string' && process.argv.slice(2)[1]) {
-    if (config.publish_entries.bulkPublish) {
-      retryFailedLogs(process.argv.slice(2)[1], queue, 'bulk');
-    } else {
-      retryFailedLogs(process.argv.slice(2)[1], { entryQueue: queue }, 'publish');
-    }
-  }
-} else {
-  start();
-}
-
-
-// start();
